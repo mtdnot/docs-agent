@@ -1,0 +1,48 @@
+import os
+import re
+from dotenv import load_dotenv
+from github_loader import all_docs
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+
+load_dotenv()
+
+# 文書を分割
+splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+split_docs = splitter.split_documents(all_docs)
+
+# ベクトルDB作成
+vectordb = Chroma.from_documents(split_docs, OpenAIEmbeddings(), persist_directory="vectorstore")
+
+# Retriever + LLM
+retriever = vectordb.as_retriever(search_kwargs={"k": 5})
+llm = ChatOpenAI(model="gpt-4", temperature=0.4)
+qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+
+# TOC 読み込み
+with open("output/toc.md", "r", encoding="utf-8") as f:
+    toc_lines = f.readlines()
+
+# セクション抽出
+sections = []
+for line in toc_lines:
+    if line.startswith("## "):
+        sections.append(line.strip("#\n ").strip())
+    elif re.match(r"^\s*-\s+\[.+\]\(.+\)", line):
+        match = re.match(r"^\s*-\s+\[(.+?)\]\(.+\)", line)
+        if match:
+            sections.append(match.group(1))
+
+# 生成
+os.makedirs("output/sections", exist_ok=True)
+for section in sections:
+    if not section:
+        continue
+    print(f"writing section...: {section}")
+    result = qa_chain.invoke(f"『{section}』について、製品MCP-Routerに即して詳しく解説してください（200字程度）")
+    with open(f"output/sections/{section.replace('/', '_')}.md", "w", encoding="utf-8") as f:
+        f.write(f"## {section}\n\n{result}")
+
+print("全章の本文生成が完了しました。output/sections/ に出力されています。")
