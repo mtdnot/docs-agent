@@ -1,0 +1,24 @@
+import os
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+load_dotenv()
+
+llm = ChatOpenAI(model_name="gpt-4", temperature=0.3)
+
+prompt = PromptTemplate.from_template(open("prompts/structure_prompt.txt").read())
+
+chain = LLMChain(llm=llm, prompt=prompt)
+
+result = chain.run({
+    "product_name": "MCP-Router",
+    "description": "複数のMCPサーバーを一元管理できるデスクトップアプリケーション。AIエージェントの統合にも対応。",
+    "audience": "LLM開発者、AIツール統合に関心のある技術者"
+})
+
+with open("output/toc.md", "w") as f:
+    f.write(result)
+
+print("✅ 構成生成完了：output/toc.md を確認せよ")
