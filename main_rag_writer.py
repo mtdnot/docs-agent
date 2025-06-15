@@ -10,11 +10,69 @@ from langchain.chains import RetrievalQA
 load_dotenv()
 
 # 文書を分割
-splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 split_docs = splitter.split_documents(all_docs)
 
+# TSXファイルからルート定義ファイルを探索
+def find_possible_routes(base_dir):
+    routes = set()
+    for root, _, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith(".tsx"):
+                path = os.path.join(root, file)
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if "<Route" in content or "useRoutes(" in content or "createBrowserRouter" in content:
+                    routes.add(path)
+    return routes
+
+# App.tsxからルートコンポーネント抽出
+def extract_routed_components_from_app(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    route_targets = set()
+    route_pattern = re.compile(r"element=\{<([A-Z]\w*)")
+    for match in route_pattern.finditer(content):
+        component_name = match.group(1)
+        route_targets.add(component_name)
+
+    return route_targets
+
+# コンポーネント名からファイルパスを特定
+def resolve_component_to_file(component_name, search_root="src"):
+    for root, _, files in os.walk(search_root):
+        for file in files:
+            if file.endswith(".tsx") and file.removesuffix(".tsx").endswith(component_name):
+                return os.path.join(root, file)
+    return None
+
+print("--- DEBUGGING ---")
+
+# ルートファイルを探す
+#possible_routes = find_possible_routes("src/components/")
+possible_routers = "src/components/App.tsx"
+print(f"Found {len(possible_routes)} route files: {possible_routes}")
+# routed_components抽出
+routed_components = set()
+print(f"Found {len(routed_components)} component names: {routed_components}")
+for route_file in possible_routes:
+    routed_components.update(extract_routed_components_from_app(route_file))
+
+# ファイルパスに変換
+routed_files = set()
+for comp in routed_components:
+    path = resolve_component_to_file(comp)
+    if path:
+        routed_files.add(path)
+routed_files.update(possible_routes)  # ルート定義ファイルも対象
+print(f"Resolved {len(routed_files)} file paths: {routed_files}")
+
+# 対象ページを絞り込み
+page_docs = [doc for doc in split_docs if doc.metadata.get("path", "") in routed_files]
+print(f"Number of page_docs: {len(page_docs)}")
 # ベクトルDB作成
-vectordb = Chroma.from_documents(split_docs, OpenAIEmbeddings(), persist_directory="vectorstore")
+vectordb = Chroma.from_documents(page_docs, OpenAIEmbeddings(), persist_directory="vectorstore")
 
 # Retriever + LLM
 retriever = vectordb.as_retriever(search_kwargs={"k": 5})
@@ -40,9 +98,9 @@ os.makedirs("output/sections", exist_ok=True)
 for section in sections:
     if not section:
         continue
-    print(f"writing section...: {section}")
-    result = qa_chain.invoke(f"『{section}』について、製品MCP-Routerに即して詳しく解説してください（200字程度）")
+    print(f"📝 セクション: {section}")
+    result = qa_chain.invoke(f"『{section}』について、製品MCP-Routerに即して、利用者の視点から必要な情報のみを簡潔に説明してください（200字以内）")
     with open(f"output/sections/{section.replace('/', '_')}.md", "w", encoding="utf-8") as f:
         f.write(f"## {section}\n\n{result}")
 
-print("全章の本文生成が完了しました。output/sections/ に出力されています。")
+print("✅ 全章の本文生成が完了！output/sections/ を確認してね")
