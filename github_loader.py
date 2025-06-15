@@ -14,13 +14,18 @@ contents = repo.get_contents("")
 
 all_docs = []
 
+max_attempts = 5
+attempt = 0
+
 while contents:
+#while contents and attempt < max_attempts:
+#    attempt += 1
     file_content = contents.pop(0)
     if file_content.type == "dir":
         contents.extend(repo.get_contents(file_content.path))
     else:
-#        if file_content.path.endswith((".md")):
-        if file_content.path.endswith((".md", ".ts", ".tsx", ".jsx", ".html", ".json")):
+        if file_content.path.endswith((".tsx")):
+#        if file_content.path.endswith((".md", ".ts", ".tsx", ".jsx", ".html", ".json")):
             print(f"checking {file_content.path}...")
             decoded = file_content.decoded_content.decode("utf-8")
             doc = Document(page_content=decoded, metadata={"path": file_content.path})

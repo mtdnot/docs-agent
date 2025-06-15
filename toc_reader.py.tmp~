@@ -1,0 +1,27 @@
+'''
+# TOC 読み込み
+with open("output/toc.md", "r", encoding="utf-8") as f:
+    toc_lines = f.readlines()
+
+# セクション抽出
+sections = []
+for line in toc_lines:
+    if line.startswith("## "):
+        sections.append(line.strip("#\n ").strip())
+    elif re.match(r"^\s*-\s+\[.+\]\(.+\)", line):
+        match = re.match(r"^\s*-\s+\[(.+?)\]\(.+\)", line)
+        if match:
+            sections.append(match.group(1))
+
+# 生成
+os.makedirs("output/sections", exist_ok=True)
+for section in sections:
+    if not section:
+        continue
+    print(f" セクション: {section}")
+    result = qa_chain.invoke(f"『{section}』について、製品MCP-Routerに即して、利用者の視点から必要な情報のみを簡潔に説明してください（200字以内）")
+    with open(f"output/sections/{section.replace('/', '_')}.md", "w", encoding="utf-8") as f:
+        f.write(f"## {section}\n\n{result}")
+
+print("全章の本文生成が完了しました。output/sections/ に出力されています。")
+'''
