@@ -9,6 +9,8 @@ from langchain.chains import RetrievalQA
 
 load_dotenv()
 
+dev_dir_root = "/home/ubuntu/dev/work/mcp-router/src/components/"
+
 # 文書を分割
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 split_docs = splitter.split_documents(all_docs)
@@ -17,6 +19,7 @@ split_docs = splitter.split_documents(all_docs)
 def find_possible_routes(base_dir):
     routes = set()
     for root, _, files in os.walk(base_dir):
+        print("root:{root},{files}")
         for file in files:
             if file.endswith(".tsx"):
                 path = os.path.join(root, file)
@@ -40,7 +43,7 @@ def extract_routed_components_from_app(file_path):
     return route_targets
 
 # コンポーネント名からファイルパスを特定
-def resolve_component_to_file(component_name, search_root="src"):
+def resolve_component_to_file(component_name, search_root=dev_dir_root):
     for root, _, files in os.walk(search_root):
         for file in files:
             if file.endswith(".tsx") and file.removesuffix(".tsx").endswith(component_name):
@@ -50,15 +53,13 @@ def resolve_component_to_file(component_name, search_root="src"):
 print("--- DEBUGGING ---")
 
 # ルートファイルを探す
-#possible_routes = find_possible_routes("src/components/")
-possible_routers = "src/components/App.tsx"
+possible_routes = find_possible_routes(dev_dir_root)
 print(f"Found {len(possible_routes)} route files: {possible_routes}")
 # routed_components抽出
 routed_components = set()
-print(f"Found {len(routed_components)} component names: {routed_components}")
 for route_file in possible_routes:
     routed_components.update(extract_routed_components_from_app(route_file))
-
+print(f"Found {len(routed_components)} component names: {routed_components}")
 # ファイルパスに変換
 routed_files = set()
 for comp in routed_components:
@@ -68,8 +69,12 @@ for comp in routed_components:
 routed_files.update(possible_routes)  # ルート定義ファイルも対象
 print(f"Resolved {len(routed_files)} file paths: {routed_files}")
 
+for full_path in routed_files:
+    short_path = re.sub(r"^/home/ubuntu/dev/work/mcp-router/", "", full_path)
+    print(f"short_path:{short_path}")
 # 対象ページを絞り込み
-page_docs = [doc for doc in split_docs if doc.metadata.get("path", "") in routed_files]
+
+page_docs = [doc for doc in split_docs if doc.metadata.get("path", "") in short_path]
 print(f"Number of page_docs: {len(page_docs)}")
 # ベクトルDB作成
 vectordb = Chroma.from_documents(page_docs, OpenAIEmbeddings(), persist_directory="vectorstore")
@@ -98,9 +103,9 @@ os.makedirs("output/sections", exist_ok=True)
 for section in sections:
     if not section:
         continue
-    print(f"📝 セクション: {section}")
+    print(f" セクション: {section}")
     result = qa_chain.invoke(f"『{section}』について、製品MCP-Routerに即して、利用者の視点から必要な情報のみを簡潔に説明してください（200字以内）")
     with open(f"output/sections/{section.replace('/', '_')}.md", "w", encoding="utf-8") as f:
         f.write(f"## {section}\n\n{result}")
 
-print("✅ 全章の本文生成が完了！output/sections/ を確認してね")
+print("全章の本文生成が完了しました。output/sections/ に出力されています。")
